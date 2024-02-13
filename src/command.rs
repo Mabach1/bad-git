@@ -1,12 +1,4 @@
-use crate::bad_git;
-
-#[derive(Debug)]
-pub enum BadGitError {
-    NoArgumentsProvided,
-    InvalidCommand,
-    DidNotProvideFilesToAdd,
-    HasNotBeenInitialized,
-}
+use crate::bad_git::{self, BadGitError};
 
 #[derive(Debug)]
 pub enum Command {
@@ -37,11 +29,18 @@ impl Command {
 
     pub fn execute(&self) -> Result<(), BadGitError> {
         if !bad_git::is_initialized() {
-            return Err(BadGitError::HasNotBeenInitialized)
+            return Err(BadGitError::HasNotBeenInitialized);
         }
 
-        println!("{:?}", self);
+        match self {
+            Command::Init => bad_git::init(),
+            Command::Add(_) => todo!(),
+            Command::Commit => todo!(),
+            Command::Status => todo!(),
+        };    
+
+        // println!("{:?}", self);
+
         Ok(())
     }
 }
-

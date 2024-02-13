@@ -1,7 +1,8 @@
-pub mod command;
 pub mod bad_git;
+pub mod command;
 
-use command::{BadGitError, Command};
+use crate::bad_git::BadGitError;
+use command::Command;
 use std::env;
 
 fn main() -> Result<(), BadGitError> {
