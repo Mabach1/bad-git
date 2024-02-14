@@ -1,6 +1,6 @@
 use crate::bad_git::{self, BadGitError};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Command {
     Init,
     Add(Vec<String>),
@@ -28,16 +28,16 @@ impl Command {
     }
 
     pub fn execute(&self) -> Result<(), BadGitError> {
-        if !bad_git::is_initialized() {
+        if !bad_git::is_initialized() && *self != Command::Init {
             return Err(BadGitError::HasNotBeenInitialized);
         }
 
         match self {
             Command::Init => bad_git::init(),
-            Command::Add(_) => todo!(),
+            Command::Add(paths) => bad_git::add(paths)?,
             Command::Commit => todo!(),
             Command::Status => todo!(),
-        };    
+        };
 
         // println!("{:?}", self);
 
