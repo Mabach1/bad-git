@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
 };
@@ -47,26 +48,28 @@ pub fn init() {
 }
 
 // TODO: maybe do some meaningful error
-fn push_dir_contents(dir_path: &str) -> Option<Vec<String>> {
-    let mut files = vec![];
-
+fn get_dir_contents_recursive(dir_path: &str, files: &mut Vec<String>) {
     match fs::read_dir(dir_path) {
         Ok(entries) => {
             for entry in entries {
                 if let Ok(entry) = entry {
                     let entry_path = entry.path();
 
-                    files.push(entry_path.to_string_lossy().into_owned());
-
                     if entry_path.is_dir() {
-                        push_dir_contents(&entry_path.to_string_lossy())?;
+                        get_dir_contents_recursive(&entry_path.to_string_lossy(), files);
+                    } else {
+                        files.push(entry_path.to_string_lossy().into_owned());
                     }
                 }
             }
         }
-        Err(_) => return None,
+        Err(_) => panic!("{dir_path} does not exists"),
     }
+}
 
+fn get_dir_contents(dir_path: &str) -> Option<Vec<String>> {
+    let mut files = vec![];
+    get_dir_contents_recursive(dir_path, &mut files);
     Some(files)
 }
 
@@ -78,16 +81,51 @@ fn copy_file(from: &str, to: &str) {
     fs::copy(from, to).unwrap();
 }
 
+fn get_files_to_ignore() -> HashSet<String> {
+    let ignore_file_path = "./.badignore";
+    let mut files = HashSet::new();
+
+    let bad_git_files =
+        get_dir_contents(ROOT_DIR_PATH).expect("Bad git should have been initialized");
+
+    bad_git_files.iter().for_each(|file| {
+        files.insert(file.to_string());
+    });
+
+    let contents = match fs::read_to_string(ignore_file_path) {
+        Ok(content) => content,
+        Err(_) => return files,
+    };
+
+    contents.split_whitespace().for_each(|file| {
+        if Path::is_dir(&PathBuf::from(file)) {
+            let dir_content = get_dir_contents(file).unwrap();
+            dir_content.iter().for_each(|file| {
+                files.insert(file.to_string());
+            });
+        } else {
+            files.insert(file.to_string());
+        }
+    });
+
+    files
+}
+
 pub fn add(paths: &Vec<String>) -> Result<(), BadGitError> {
     let mut sources: Vec<String> = vec![];
+    let files_to_ignore = get_files_to_ignore();
 
     for path in paths {
         if !exists(path) {
             return Err(BadGitError::FileDoesNotExists(path.to_string()));
         }
 
+        if files_to_ignore.contains(path) {
+            continue;
+        }
+
         if Path::is_dir(&PathBuf::from(path)) {
-            sources.append(&mut push_dir_contents(path).unwrap());
+            sources.append(&mut get_dir_contents(path).unwrap());
             continue;
         }
 
@@ -98,6 +136,8 @@ pub fn add(paths: &Vec<String>) -> Result<(), BadGitError> {
         .iter()
         .map(|e| format!("{}/{}", ADD_DIR_PATH, e))
         .collect();
+
+    println!("{:?}", sources);
 
     for (src, dst) in sources.iter().zip(destinations.iter()) {
         copy_file(src, dst);

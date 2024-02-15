@@ -15,7 +15,7 @@ impl Command {
             "add" => {
                 let files = args[2..].to_vec();
 
-                if files.len() == 0 {
+                if files.is_empty() {
                     return Err(BadGitError::DidNotProvideFilesToAdd);
                 }
 
