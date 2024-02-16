@@ -4,6 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use std::fs::Permissions;
+use std::os::unix::fs::PermissionsExt;
+
 #[derive(Debug)]
 pub enum BadGitError {
     NoArgumentsProvided,
@@ -78,13 +81,16 @@ fn copy_file(from: &str, to: &str) {
         fs::create_dir_all(parent_dir)
             .unwrap_or_else(|e| panic!("Error creating directory {}: {}", parent_dir.display(), e));
     }
-    fs::copy(from, to).unwrap();
+    match fs::copy(from, to) {
+        Ok(_) => (),
+        Err(err) => println!("could not copy file from: {from} to: {to}, because fo error: {err}"),
+    }
 }
 
 fn get_files_to_ignore() -> HashSet<String> {
-    let ignore_file_path = "./.badignore";
     let mut files = HashSet::new();
 
+    // ignoring bad git files
     let bad_git_files =
         get_dir_contents(ROOT_DIR_PATH).expect("Bad git should have been initialized");
 
@@ -92,23 +98,45 @@ fn get_files_to_ignore() -> HashSet<String> {
         files.insert(file.to_string());
     });
 
-    let contents = match fs::read_to_string(ignore_file_path) {
+    files.insert("./.badignore".to_string());
+
+    let contents = match fs::read_to_string(".badignore") {
         Ok(content) => content,
-        Err(_) => return files,
+        Err(error) => {
+            println!("could not read .badignore; error: {error}");
+            return files;
+        }
     };
 
     contents.split_whitespace().for_each(|file| {
         if Path::is_dir(&PathBuf::from(file)) {
             let dir_content = get_dir_contents(file).unwrap();
             dir_content.iter().for_each(|file| {
-                files.insert(file.to_string());
+                files.insert(normalize_path(file));
             });
         } else {
-            files.insert(file.to_string());
+            files.insert(normalize_path(file));
         }
     });
 
     files
+}
+
+fn grant_permissions(filename: &str) {
+    if !exists(filename) {
+        return;
+    }
+
+    let source_permissions = fs::metadata(PathBuf::from(filename)).unwrap().permissions();
+    if !source_permissions.mode() & 0o200 != 0 {
+        let new_permissions = Permissions::from_mode(source_permissions.mode() | 0o200);
+        fs::set_permissions(filename, new_permissions).unwrap();
+    }
+}
+
+fn normalize_path(path: &str) -> String {
+    let normalized_path: PathBuf = PathBuf::from(path).components().collect();
+    normalized_path.to_str().unwrap().to_string()
 }
 
 pub fn add(paths: &Vec<String>) -> Result<(), BadGitError> {
@@ -120,10 +148,6 @@ pub fn add(paths: &Vec<String>) -> Result<(), BadGitError> {
             return Err(BadGitError::FileDoesNotExists(path.to_string()));
         }
 
-        if files_to_ignore.contains(path) {
-            continue;
-        }
-
         if Path::is_dir(&PathBuf::from(path)) {
             sources.append(&mut get_dir_contents(path).unwrap());
             continue;
@@ -132,12 +156,21 @@ pub fn add(paths: &Vec<String>) -> Result<(), BadGitError> {
         sources.push(path.to_string());
     }
 
-    let destinations: Vec<String> = sources
+    let sources: Vec<String> = sources.iter().map(|s| normalize_path(s)).collect();
+
+    let sources: Vec<String> = sources
         .iter()
-        .map(|e| format!("{}/{}", ADD_DIR_PATH, e))
+        // this allocation is bad, we don't care
+        .filter(|s| !files_to_ignore.contains(&s[2..].to_string()))
+        .map(|s| s.to_string())
         .collect();
 
-    println!("{:?}", sources);
+    let destinations: Vec<String> = sources
+        .iter()
+        .map(|d| format!("{}/{}", ADD_DIR_PATH, d))
+        .collect();
+
+    destinations.iter().for_each(|d| grant_permissions(d));
 
     for (src, dst) in sources.iter().zip(destinations.iter()) {
         copy_file(src, dst);

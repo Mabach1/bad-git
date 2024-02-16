@@ -5,6 +5,7 @@ use crate::bad_git::BadGitError;
 use command::Command;
 use std::env;
 
+
 fn main() -> Result<(), BadGitError> {
     let args: Vec<String> = env::args().collect();
 

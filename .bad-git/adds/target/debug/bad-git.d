@@ -1,0 +1,1 @@
+/home/mabachi/projects/rust/bad-git/target/debug/bad-git: /home/mabachi/projects/rust/bad-git/src/bad_git.rs /home/mabachi/projects/rust/bad-git/src/command.rs /home/mabachi/projects/rust/bad-git/src/main.rs
